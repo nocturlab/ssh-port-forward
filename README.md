@@ -14,7 +14,7 @@ services:
     networks:
       - host
     environment:
-      PRIVATE_KEY: |
+      SSH_KEY: |
         -----BEGIN OPENSSH PRIVATE KEY-----
         [...]
         -----END OPENSSH PRIVATE KEY-----
