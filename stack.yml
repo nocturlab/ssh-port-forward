@@ -1,0 +1,20 @@
+version: "3.7"
+
+services:
+  forward:
+    image: nocturlab/ssh-port-forward:latest
+    networks:
+      - host
+    environment:
+      - PRIVATE_KEY='private-key-data-goes-here'
+      - REMOTE_USER=user
+      - REMOTE_HOST=example.com
+      - SSH_PORT=22
+      - PORT=20
+      - REMOTE_PORT=2222
+    deploy:
+      replicas: 1
+
+networks:
+  host:
+    external: true
