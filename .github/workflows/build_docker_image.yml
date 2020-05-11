@@ -1,0 +1,74 @@
+name: Build Docker Image
+on: 
+  push
+  schedule:
+#             ┌───────────── minute (0 - 59)
+#             │ ┌───────────── hour (0 - 23)
+#             │ │ ┌───────────── day of the month (1 - 31)
+#             │ │ │ ┌───────────── month (1 - 12 or JAN-DEC)
+#             │ │ │ │ ┌───────────── day of the week (0 - 6 or SUN-SAT)
+    - cron:  '* * * * 0'
+
+jobs:
+
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on:
+      - self-hosted
+      - ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ARM, ARM64, X64]
+    steps:
+    - name: Checkout code from Git repository
+      uses: actions/checkout@v2
+
+    - name: Log into registry
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
+
+    - name: Build image
+      run: |
+        IMAGE_ID=nocturlab/ssh-port-forward
+        # Change all uppercase to lowercase
+        IMAGE_ID=$(echo ${IMAGE_ID} | tr '[A-Z]' '[a-z]')
+        # Strip git ref prefix from version
+        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        # Strip "v" prefix from tag name
+        [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo ${VERSION} | sed -e 's/^v//')
+        # Use Docker `latest` tag convention
+        [ "$VERSION" == "master" ] && VERSION=latest
+        # If it was Matrix os, so tag it with.
+        if [ -n "${{ matrix.os }}" ]; then
+          VERSION="${VERSION}-$(echo ${{ matrix.os }} | tr '[A-Z]' '[a-z]')"
+        fi
+        echo "IMAGE_ID=${IMAGE_ID}"
+        echo "VERSION=${VERSION}"
+        docker build -f Dockerfile -t "${IMAGE_ID}:${VERSION}" .
+        docker push ${IMAGE_ID}:${VERSION}
+
+  publish:
+    name: Publish
+    runs-on: 
+      - self-hosted
+      - X64
+    needs: build
+    env:
+      DOCKER_CLI_EXPERIMENTAL: enabled
+    steps:
+    - name: Get current branch
+      run: |
+        BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//_/g')
+        if [ "${BRANCH_NAME}" = "master" ]; then
+          BRANCH_NAME="latest"
+        fi
+        echo "::set-env name=BRANCH_NAME::${BRANCH_NAME}"
+    - run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
+        
+        docker manifest create nocturlab/ssh-port-forward:${{ env.BRANCH_NAME }} \
+                               nocturlab/ssh-port-forward:${{ env.BRANCH_NAME }}-x64 \
+                               nocturlab/ssh-port-forward:${{ env.BRANCH_NAME }}-arm64 \
+                               nocturlab/ssh-port-forward:${{ env.BRANCH_NAME }}-arm
+        
+        docker manifest push nocturlab/ssh-port-forward:${{ env.BRANCH_NAME }}
