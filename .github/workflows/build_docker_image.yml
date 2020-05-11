@@ -1,6 +1,6 @@
 name: Build Docker Image
 on: 
-  push
+  push:
   schedule:
 #             ┌───────────── minute (0 - 59)
 #             │ ┌───────────── hour (0 - 23)
